@@ -168,6 +168,7 @@ class Checklist final : public QWidget {
             auto *kind = new QTableWidgetItem(t.manual ? "Manual" : "Auto");
             const auto *r = findRule(t.rule);
             kind->setToolTip(t.manual ? "Tick this task yourself" : QString::fromUtf8(r->label) + (t.target.isEmpty() ? "" : ": " + t.target));
+            kind->setTextAlignment(Qt::AlignCenter);
             table->setItem(row, 1, kind);
             table->setItem(row, 2, new QTableWidgetItem);
         }
@@ -178,8 +179,8 @@ class Checklist final : public QWidget {
         if (!writable) { QMessageBox::warning(this, "Settings unavailable", message->text()); return; }
         if (index < 0 && tasks.size() >= 200) { QMessageBox::information(this, "Checklist full", "Maximum 200 tasks."); return; }
         const Task old = index >= 0 ? tasks.at(size_t(index)) : Task{};
-        QDialog dialog(this); dialog.setWindowTitle(index < 0 ? "Add task" : "Edit task"); dialog.resize(460, 300);
-        QFormLayout form(&dialog);
+        QDialog dialog(this); dialog.setWindowTitle(index < 0 ? "Add task" : "Edit task"); dialog.resize(460, 320);
+        QFormLayout form(&dialog); form.setContentsMargins(20, 20, 20, 20); form.setHorizontalSpacing(14); form.setVerticalSpacing(14);
         QComboBox type; type.addItems({"Manual - I tick it myself", "Automatic - OBS checks it"}); type.setCurrentIndex(old.manual ? 0 : 1);
         QLineEdit name(old.name); name.setMaxLength(180); name.setPlaceholderText("e.g. Post my stream link");
         QComboBox rule; for (const auto &r : rules) rule.addItem(r.label, r.id);
@@ -239,14 +240,53 @@ class Checklist final : public QWidget {
 public:
     explicit Checklist(QWidget *parent) : QWidget(parent)
     {
-        setMinimumSize(300, 260);
+        setMinimumSize(320, 300);
+        setObjectName("TodoDock");
+        setStyleSheet(R"(
+            QWidget#TodoDock { background: palette(window); }
+            QWidget#TodoDock QPushButton {
+                padding: 7px 12px; min-height: 18px;
+                border: 1px solid palette(mid); border-radius: 6px;
+                background: palette(button); color: palette(button-text);
+            }
+            QWidget#TodoDock QPushButton:hover { border-color: palette(highlight); }
+            QWidget#TodoDock QPushButton:pressed { background: palette(mid); }
+            QWidget#TodoDock QPushButton:focus { border: 2px solid palette(highlight); padding: 6px 11px; }
+            QWidget#TodoDock QPushButton#AddTask {
+                background: palette(highlight); color: palette(highlighted-text);
+                border-color: palette(highlight); font-weight: 600;
+            }
+            QWidget#TodoDock QTableWidget {
+                border: 1px solid palette(mid); border-radius: 8px;
+                background: palette(base); alternate-background-color: palette(alternate-base);
+                selection-background-color: palette(highlight);
+                selection-color: palette(highlighted-text); outline: 0;
+            }
+            QWidget#TodoDock QTableWidget::item { padding: 6px; border: none; }
+            QWidget#TodoDock QHeaderView::section {
+                background: palette(window); color: palette(text);
+                border: none; border-bottom: 1px solid palette(mid);
+                padding: 8px 6px; font-weight: 600;
+            }
+            QWidget#TodoDock QProgressBar {
+                border: none; border-radius: 3px; background: palette(mid);
+            }
+            QWidget#TodoDock QProgressBar::chunk { border-radius: 3px; background: palette(highlight); }
+        )");
         auto *layout = new QVBoxLayout(this);
+        layout->setContentsMargins(16, 16, 16, 12); layout->setSpacing(12);
         auto *title = new QLabel("Todo Plugin"); QFont font = title->font(); font.setBold(true); font.setPointSize(font.pointSize() + 3); title->setFont(font); layout->addWidget(title);
-        summary = new QLabel; layout->addWidget(summary);
-        progress = new QProgressBar; progress->setTextVisible(false); progress->setMaximumHeight(8); layout->addWidget(progress);
+        auto *subtitle = new QLabel("Your pre-stream checklist");
+        layout->addWidget(subtitle);
+        summary = new QLabel; summary->setWordWrap(true); layout->addWidget(summary);
+        progress = new QProgressBar; progress->setTextVisible(false); progress->setFixedHeight(6); layout->addWidget(progress);
         auto *actions = new QHBoxLayout;
-        auto *add = new QPushButton("+ Add Task"); auto *reset = new QPushButton("New stream"); actions->addWidget(add); actions->addWidget(reset); layout->addLayout(actions);
+        auto *add = new QPushButton("+ Add Task"); add->setObjectName("AddTask"); auto *reset = new QPushButton("New stream"); actions->addWidget(add); actions->addWidget(reset); layout->addLayout(actions);
         table = new QTableWidget(0, 3); table->setHorizontalHeaderLabels({"Task", "Type", "Status"}); table->verticalHeader()->hide();
+        table->setShowGrid(false); table->setAlternatingRowColors(true);
+        table->verticalHeader()->setDefaultSectionSize(42);
+        table->horizontalHeader()->setHighlightSections(false);
+        table->horizontalHeader()->setMinimumSectionSize(55);
         table->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Stretch);
         table->horizontalHeader()->setSectionResizeMode(1, QHeaderView::ResizeToContents);
         table->horizontalHeader()->setSectionResizeMode(2, QHeaderView::ResizeToContents);
@@ -255,7 +295,12 @@ public:
         auto *bottom = new QHBoxLayout; auto *editButton = new QPushButton("Edit"); auto *remove = new QPushButton("Delete"); bottom->addWidget(editButton); bottom->addWidget(remove); bottom->addStretch(); layout->addLayout(bottom);
         auto *backup = new QHBoxLayout; auto *exportButton = new QPushButton("Export backup"); auto *importButton = new QPushButton("Import backup"); backup->addWidget(exportButton); backup->addWidget(importButton); layout->addLayout(backup);
         message = new QLabel; message->setWordWrap(true); message->setTextFormat(Qt::PlainText); message->setStyleSheet("color: #e4b96a;"); layout->addWidget(message);
-        auto *note = new QLabel("Offline checks every second. Manual ticks stay saved until New stream. This checklist does not block Start Streaming."); note->setWordWrap(true); layout->addWidget(note);
+        auto *note = new QLabel("Auto checks update every second");
+        note->setToolTip("Manual ticks stay saved until New stream. This checklist does not block Start Streaming.");
+        note->setWordWrap(true);
+        QFont smallFont = note->font(); smallFont.setPointSizeF(qMax(8.0, smallFont.pointSizeF() - 1.0));
+        note->setFont(smallFont); subtitle->setFont(smallFont);
+        layout->addWidget(note);
         load(); rebuild();
         connect(add, &QPushButton::clicked, this, [this] { edit(-1); });
         connect(editButton, &QPushButton::clicked, this, [this] { if (table->currentRow() >= 0) edit(table->currentRow()); });
@@ -304,10 +349,12 @@ public:
             const bool ok = result.state == State::Done;
             cell->setText(ok ? "Done" : result.state == State::NotDone ? "Not done" : "Unknown");
             cell->setToolTip(result.detail);
+            cell->setTextAlignment(Qt::AlignCenter);
+            QFont statusFont = cell->font(); statusFont.setWeight(QFont::DemiBold); cell->setFont(statusFont);
             cell->setForeground(QColor(ok ? "#65ca91" : result.state == State::NotDone ? "#ed8989" : "#e4b96a"));
             if (ok) ++done;
         }
-        summary->setText(tasks.empty() ? "Add your first pre-stream task" : done == int(tasks.size()) ? "All tasks done - ready!" : QString("%1 / %2 done - unfinished tasks remain").arg(done).arg(qulonglong(tasks.size())));
+        summary->setText(tasks.empty() ? "Add your first pre-stream task" : done == int(tasks.size()) ? "All tasks complete. Ready to stream." : QString("%1 of %2 tasks complete").arg(done).arg(qulonglong(tasks.size())));
         progress->setRange(0, tasks.empty() ? 1 : int(tasks.size())); progress->setValue(done);
     }
 };
