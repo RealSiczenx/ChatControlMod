@@ -17,6 +17,17 @@ int main()
     check(checklist::recording(true, true), State::NotDone, "paused recording");
     check(checklist::recording(true, false), State::Done, "running recording");
     check(checklist::recording(false, true), State::NotDone, "inactive paused recording");
-    if (!failures) std::cout << "PASS: 10 status decision cases\n";
+    check(checklist::invert(State::Unknown, false), State::Unknown, "OFF never turns Unknown into Done");
+    check(checklist::invert(State::Done, false), State::NotDone, "OFF reverses true");
+    check(checklist::invert(State::NotDone, false), State::Done, "OFF passes false");
+    check(checklist::numeric(50, 50, 0), State::Done, "minimum inclusive");
+    check(checklist::numeric(49, 50, 0), State::NotDone, "below minimum");
+    check(checklist::numeric(50, 50, 1), State::Done, "maximum inclusive");
+    check(checklist::numeric(51, 50, 1), State::NotDone, "above maximum");
+    check(checklist::numeric(59.94, 59.94, 2), State::Done, "fractional FPS exact");
+    check(checklist::numeric(59.94, 60, 2), State::NotDone, "fractional FPS mismatch");
+    check(checklist::numeric(-150, -100, 1), State::Done, "negative audio sync");
+    check(checklist::numeric(NAN, 50, 0), State::Unknown, "invalid numeric value");
+    if (!failures) std::cout << "PASS: 21 status and threshold decision cases\n";
     return failures ? 1 : 0;
 }

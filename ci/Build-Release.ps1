@@ -11,7 +11,7 @@ $specPath = Join-Path $staging 'buildspec.json'
 $spec = Get-Content -Raw $specPath | ConvertFrom-Json
 $spec.name = 'stream-checklist'
 $spec.displayName = 'Todo Plugin'
-$spec.version = '1.0.0'
+$spec.version = '1.1.0'
 $spec.author = 'Todo Plugin contributors'
 $spec.website = 'https://obsproject.com'
 $spec.email = ''
@@ -39,6 +39,11 @@ add_executable(checklist-tests tests/checks.cpp)
 target_include_directories(checklist-tests PRIVATE src)
 target_compile_features(checklist-tests PRIVATE cxx_std_17)
 add_test(NAME checklist-status COMMAND checklist-tests)
+add_executable(checklist-model-tests tests/model.cpp)
+target_include_directories(checklist-model-tests PRIVATE src)
+target_compile_features(checklist-model-tests PRIVATE cxx_std_17)
+target_link_libraries(checklist-model-tests PRIVATE Qt6::Core Qt6::Gui)
+add_test(NAME checklist-model COMMAND checklist-model-tests)
 '@
 Set-Content -Encoding utf8 -LiteralPath (Join-Path $staging 'CMakeLists.txt') -Value $cmake
 Push-Location $staging
@@ -47,6 +52,9 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'OBS/Qt configuration failed.' }
     & cmake --build --preset windows-x64 --parallel
     if ($LASTEXITCODE -ne 0) { throw 'Plugin compilation failed.' }
+    $qtDll = Get-ChildItem -Path (Join-Path $staging '.deps') -Filter Qt6Core.dll -Recurse | Select-Object -First 1
+    if (-not $qtDll) { throw 'Qt runtime for model tests was not found.' }
+    $env:PATH = $qtDll.DirectoryName + ';' + $env:PATH
     & ctest --test-dir build_x64 -C RelWithDebInfo --output-on-failure
     if ($LASTEXITCODE -ne 0) { throw 'Status tests failed.' }
     & cmake --install build_x64 --config RelWithDebInfo --prefix (Join-Path $release 'package')
@@ -70,6 +78,10 @@ No WebSocket or Internet connection is needed to use the plugin.
 This package was compiled in CI; live OBS operation still needs verification.
 Uses the OBS 31.1.1 development baseline from the pinned official plugin template.
 Use Windows x64 OBS, and report the OBS version and log if loading fails.
+
+Version 1.1 adds 31 automatic checks, Yes/No conditions, numeric comparisons,
+Customize (accent color, text size, row spacing, refresh interval) and Up/Down task
+ordering. Existing tasks load automatically; new backups include your appearance.
 
 Automatic checks reflect current OBS state. Audio mute checks do not prove sound
 is present. New stream clears manual ticks. The plugin does not block streaming.
