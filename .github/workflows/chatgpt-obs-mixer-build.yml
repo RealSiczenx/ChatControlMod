@@ -17,7 +17,8 @@ jobs:
         run: |
           $b64 = Get-Content '.chatgpt-build/obs-split-audio-mixer.zip.b64' -Raw
           [IO.File]::WriteAllBytes('plugin.zip', [Convert]::FromBase64String($b64.Trim()))
-          Expand-Archive plugin.zip -DestinationPath plugin-src -Force
+          New-Item -ItemType Directory -Force -Path plugin-src | Out-Null
+          tar -xf plugin.zip -C plugin-src
 
       - name: Get OBS Studio 32.2.2
         shell: pwsh
