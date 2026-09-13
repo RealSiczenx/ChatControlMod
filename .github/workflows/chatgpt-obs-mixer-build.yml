@@ -1,0 +1,56 @@
+name: ChatGPT OBS Mixer DLL Build
+
+on:
+  push:
+    branches: [chatgpt-obs-mixer-build]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-2022
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Decode plugin source
+        shell: pwsh
+        run: |
+          $b64 = Get-Content '.chatgpt-build/obs-split-audio-mixer.zip.b64' -Raw
+          [IO.File]::WriteAllBytes('plugin.zip', [Convert]::FromBase64String($b64.Trim()))
+          Expand-Archive plugin.zip -DestinationPath plugin-src -Force
+
+      - name: Get OBS Studio 32.2.2
+        shell: pwsh
+        run: |
+          git clone --recursive --shallow-submodules --depth 1 --branch 32.2.2 https://github.com/obsproject/obs-studio.git obs-studio
+          Copy-Item -Recurse -Force 'plugin-src/obs-split-audio-mixer' 'obs-studio/plugins/obs-split-audio-mixer'
+          Add-Content 'obs-studio/plugins/CMakeLists.txt' "`nadd_subdirectory(obs-split-audio-mixer)"
+          (Get-Content 'obs-studio/CMakePresets.json' -Raw).Replace('Visual Studio 18 2026','Visual Studio 17 2022') | Set-Content 'obs-studio/CMakePresets.json'
+
+      - name: Configure OBS build
+        shell: pwsh
+        working-directory: obs-studio
+        run: |
+          cmake --preset windows-x64 -DENABLE_BROWSER=OFF -DENABLE_AJA=OFF -DENABLE_VLC=OFF
+
+      - name: Build plugin DLL
+        shell: pwsh
+        working-directory: obs-studio
+        run: |
+          cmake --build build_x64 --config RelWithDebInfo --target obs-split-audio-mixer --parallel 2
+
+      - name: Collect DLL
+        shell: pwsh
+        run: |
+          $dll = Get-ChildItem -Path 'obs-studio/build_x64' -Filter 'obs-split-audio-mixer.dll' -Recurse | Select-Object -First 1
+          if (-not $dll) { throw 'obs-split-audio-mixer.dll was not produced' }
+          New-Item -ItemType Directory -Force -Path artifact | Out-Null
+          Copy-Item $dll.FullName 'artifact/obs-split-audio-mixer.dll'
+          Get-FileHash 'artifact/obs-split-audio-mixer.dll' -Algorithm SHA256 | Format-List
+
+      - name: Upload DLL
+        uses: actions/upload-artifact@v4
+        with:
+          name: obs-split-audio-mixer-windows-x64
+          path: artifact/obs-split-audio-mixer.dll
+          if-no-files-found: error
